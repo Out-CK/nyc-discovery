@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Compass, Bookmark, Settings } from 'lucide-react'
+import { Compass, Bookmark, Settings, Map } from 'lucide-react'
 
 export default function NavBar() {
   const path = usePathname()
@@ -21,6 +21,14 @@ export default function NavBar() {
       </Link>
 
       <div className="flex items-center gap-1">
+        <a
+          href="/map/"
+          className="flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-colors"
+          style={{ color: '#6b7280' }}
+        >
+          <Map size={16} />
+          Map
+        </a>
         {links.map(({ href, icon: Icon, label }) => {
           const active = path.startsWith(href)
           return (
