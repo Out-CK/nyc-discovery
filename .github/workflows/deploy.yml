@@ -1,0 +1,48 @@
+name: Deploy to Netlify
+
+# Builds the merged app: this repo (Discovery) plus the event-map bundle
+# built fresh from Out-CK/event-map main, served at /map.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: netlify-deploy-merged
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build latest map bundle
+        run: |
+          git clone --depth 1 https://github.com/Out-CK/event-map.git /tmp/event-map
+          cd /tmp/event-map
+          npm ci
+          npm run build:map
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      - name: Graft map into public/map
+        run: |
+          rm -rf public/map
+          cp -r /tmp/event-map/dist public/map
+      - run: npm ci
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Build and deploy
+        run: >
+          npx -y netlify-cli@latest deploy --build --prod
+          --site ${{ secrets.NETLIFY_SITE_ID }}
+          --auth ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          --message "gha nyc-discovery@${{ github.sha }}"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
