@@ -95,13 +95,13 @@ export async function scoreFeed(
     tagAffinity[t] = (tagAffinity[t] ?? 0) + 3
   }
 
-  // Entities already seen in this session (suppress)
+  // Entities merely seen (impression, no swipe) in this session — may return later
   const seenEntityIds = new Set<string>(
     (
       await prisma.userInteraction.findMany({
         where: {
           user_id: userId,
-          action: { in: ['impression', 'swipe_left', 'swipe_right', 'hide'] },
+          action: { in: ['impression', 'hide'] },
           session_id: sessionId ?? undefined,
         },
         select: { entity_id: true },
@@ -111,14 +111,15 @@ export async function scoreFeed(
       .filter(Boolean) as string[]
   )
 
-  // Hard-disliked entities (swipe_left in last 30 days)
-  const dislikedEntityIds = new Set<string>(
+  // Entities the user has actually judged — suppressed across ALL sessions.
+  // A right-swipe lives in Saved; a left-swipe was rejected. Neither belongs
+  // back in the deck.
+  const judgedEntityIds = new Set<string>(
     (
       await prisma.userInteraction.findMany({
         where: {
           user_id: userId,
-          action: 'swipe_left',
-          timestamp: { gte: new Date(Date.now() - 30 * 86400 * 1000) },
+          action: { in: ['swipe_left', 'swipe_right', 'save'] },
         },
         select: { entity_id: true },
       })
@@ -163,7 +164,7 @@ export async function scoreFeed(
 
   for (const post of candidates) {
     if (seenEntityIds.has(post.entity_id)) continue
-    if (dislikedEntityIds.has(post.entity_id)) continue
+    if (judgedEntityIds.has(post.entity_id)) continue
     if (post.occurrence?.event_status === 'cancelled') continue
 
     let score = 0
@@ -216,34 +217,52 @@ export async function scoreFeed(
     scored.push({ post_id: post.id, entity_id: post.entity_id, score })
   }
 
-  // 5. Sort & apply diversity penalty
+  // 5. Sort, apply diversity, paginate, and reserve exploration slots
   scored.sort((a, b) => b.score - a.score)
 
-  const result: ScoredPost[] = []
-  const typeCountWindow: string[] = []
   const PAGE_SIZE = 20
   const offset = page * PAGE_SIZE
+  const needed = offset + PAGE_SIZE
 
+  const typeById = new Map(candidates.map((c) => [c.id, c.entity.entity_type ?? 'other']))
+
+  // Build the diversity-filtered ranking deep enough to cover the requested
+  // page (the previous version capped at one page, so page >= 1 was always
+  // empty and the feed silently fell back to unscored recency).
+  const ranked: ScoredPost[] = []
+  const deferred: ScoredPost[] = []
+  const typeWindow: string[] = []
   for (const item of scored) {
-    if (result.length >= PAGE_SIZE) break
-
-    // Look up type for diversity check
-    const post = candidates.find((c) => c.id === item.post_id)
-    const entityType = post?.entity.entity_type ?? 'other'
-
+    if (ranked.length >= needed) break
+    const entityType = typeById.get(item.post_id) ?? 'other'
     // No more than 2 of the same type in a row
     if (
-      typeCountWindow.length >= 2 &&
-      typeCountWindow[typeCountWindow.length - 1] === entityType &&
-      typeCountWindow[typeCountWindow.length - 2] === entityType
+      typeWindow.length >= 2 &&
+      typeWindow[typeWindow.length - 1] === entityType &&
+      typeWindow[typeWindow.length - 2] === entityType
     ) {
+      deferred.push(item)
       continue
     }
-
-    result.push(item)
-    typeCountWindow.push(entityType)
+    ranked.push(item)
+    typeWindow.push(entityType)
+  }
+  // Backfill from diversity-deferred items if the pool ran short
+  for (const item of deferred) {
+    if (ranked.length >= needed) break
+    ranked.push(item)
   }
 
-  // Pagination: skip `offset` items from the full scored list
-  return result.slice(offset, offset + PAGE_SIZE)
+  const pageItems = ranked.slice(offset, offset + PAGE_SIZE)
+
+  // Exploration: swap 2 mid-page slots for random below-the-fold candidates so
+  // the model keeps learning outside the user's known taste.
+  const belowFold = scored.slice(needed)
+  for (const slot of [6, 14]) {
+    if (belowFold.length === 0 || pageItems.length <= slot) break
+    const pick = belowFold.splice(Math.floor(Math.random() * belowFold.length), 1)[0]
+    pageItems[slot] = pick
+  }
+
+  return pageItems
 }
