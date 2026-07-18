@@ -1,9 +1,11 @@
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import NavBar from '@/components/NavBar'
 import SimilarList from '@/components/SimilarList'
 import { parseJSON } from '@/lib/utils'
+import { scoreFeed } from '@/lib/recommendation'
 import { getForecast, weatherEmoji, isRainyDay, isNiceDay } from '@/lib/weather'
 
 const SESSION_COOKIE = 'nyc_session'
@@ -21,9 +23,9 @@ function topN(counts: Record<string, number>, n: number): [string, number][] {
 export default async function YouPage({
   searchParams,
 }: {
-  searchParams: Promise<{ similar?: string }>
+  searchParams: Promise<{ similar?: string; s?: string }>
 }) {
-  const { similar } = await searchParams
+  const { similar, s } = await searchParams
 
   const cookieStore = await cookies()
   const token = cookieStore.get(SESSION_COOKIE)?.value
@@ -33,6 +35,12 @@ export default async function YouPage({
         include: { preferences: true },
       })
     : null
+  // No session yet: bounce through /api/session, which creates the anonymous
+  // user, sets the cookie, and returns here (s=1 breaks the loop if cookies
+  // are blocked).
+  if (!user && s !== '1') {
+    redirect(`/api/session?redirect=${encodeURIComponent(`/you${similar ? `?similar=${similar}` : ''}`)}`)
+  }
   if (!user) redirect('/onboarding')
 
   const interactions = await prisma.userInteraction.findMany({
@@ -72,6 +80,22 @@ export default async function YouPage({
   const forecast = await getForecast()
   const week = Object.values(forecast).slice(0, 7)
 
+  // Your picks — the taste-ranked deck, as a browsable list. Same engine as
+  // the swipe feed (affinity + buzz + recency + weather), no diversity cap.
+  const picks = await scoreFeed(user.id, null, 12, 0)
+  const pickPosts = picks.length
+    ? await prisma.post.findMany({
+        where: { id: { in: picks.map((p) => p.post_id) } },
+        include: {
+          entity: { include: { media: { where: { is_primary: true }, take: 1 } } },
+          occurrence: true,
+        },
+      })
+    : []
+  const postById = new Map(pickPosts.map((p) => [p.id, p]))
+  const orderedPicks = picks.map((p) => postById.get(p.post_id)).filter((p) => p != null)
+  const likedTagSet = new Set(topTags.map(([t]) => t))
+
   const typeLabel: Record<string, string> = {
     concert: 'Live music', show: 'Shows & comedy', exhibit: 'Art',
     class: 'Classes', market: 'Food & markets', restaurant: 'Restaurants',
@@ -86,6 +110,66 @@ export default async function YouPage({
         {similar ? (
           <SimilarList entityId={similar} />
         ) : null}
+
+        <section>
+          <h1 className="text-2xl font-black mb-1">Your picks</h1>
+          <p className="text-sm text-gray-500 mb-5">
+            {likes.length > 0
+              ? 'Events matched to your taste — sharpened by every swipe.'
+              : 'A starting lineup from your onboarding picks — swipe in Discover to make it yours.'}
+          </p>
+          {orderedPicks.length === 0 ? (
+            <div className="text-gray-400 text-sm border border-[#2a2a2a] rounded-2xl p-6">
+              No upcoming events to rank yet — check back after the next daily sync.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {orderedPicks.map((p) => {
+                const tags = parseJSON<string[]>(p.entity.tags, []).filter(
+                  (t) => t !== 'Indoor' && t !== 'Outdoor'
+                )
+                const matched = tags.filter((t) => likedTagSet.has(t)).slice(0, 3)
+                const img = p.entity.media[0]?.source_url
+                return (
+                  <Link
+                    key={p.id}
+                    href={`/entity/${p.entity_id}`}
+                    className="flex gap-3 p-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#3a3a4a] transition-colors"
+                  >
+                    {img && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-16 h-16 rounded-lg object-cover shrink-0 bg-[#222]"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm truncate">{p.headline}</div>
+                      {p.subheadline && (
+                        <div className="text-xs text-gray-500 truncate mb-1">{p.subheadline}</div>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {(matched.length > 0 ? matched : tags.slice(0, 2)).map((t) => (
+                          <span
+                            key={t}
+                            className={`text-[10px] rounded-full px-2 py-0.5 ${
+                              matched.includes(t)
+                                ? 'bg-[#ff4757]/15 text-[#ff8a95]'
+                                : 'bg-white/10 text-gray-400'
+                            }`}
+                          >
+                            {matched.includes(t) ? '♥ ' : ''}{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </section>
 
         <section>
           <h1 className="text-2xl font-black mb-1">Your taste</h1>

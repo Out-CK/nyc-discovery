@@ -5,7 +5,8 @@ import { randomBytes } from 'crypto'
 
 const SESSION_COOKIE = 'nyc_session'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const redirectTo = new URL(req.url).searchParams.get('redirect')
   const cookieStore = await cookies()
   const token = cookieStore.get(SESSION_COOKIE)?.value
 
@@ -15,6 +16,9 @@ export async function GET() {
       include: { preferences: true },
     })
     if (user) {
+      if (redirectTo?.startsWith('/')) {
+        return NextResponse.redirect(new URL(redirectTo, req.url))
+      }
       return NextResponse.json({ user })
     }
   }
@@ -26,7 +30,9 @@ export async function GET() {
     include: { preferences: true },
   })
 
-  const res = NextResponse.json({ user })
+  const res = redirectTo?.startsWith('/')
+    ? NextResponse.redirect(new URL(redirectTo + (redirectTo.includes('?') ? '&' : '?') + 's=1', req.url))
+    : NextResponse.json({ user })
   res.cookies.set(SESSION_COOKIE, newToken, {
     httpOnly: true,
     sameSite: 'lax',
