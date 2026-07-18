@@ -12,6 +12,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.2",
     "@prisma/adapter-libsql": "^7.5.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.5.0",
     "@tanstack/react-query": "^5.94.4",
     "axios": "^1.13.6",
@@ -21,14 +22,17 @@
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.577.0",
     "next": "16.2.1",
+    "pg": "^8.22.0",
     "prisma": "^7.5.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.12",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

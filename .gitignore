@@ -46,3 +46,6 @@ next-env.d.ts
 dev.db
 prisma/dev.db
 *.db-journal
+
+# Local Netlify folder
+.netlify

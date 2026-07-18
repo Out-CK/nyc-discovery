@@ -8,16 +8,7 @@
  */
 
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
-import path from 'path'
-
-// DATABASE_URL is "file:./dev.db" (relative to project root)
-const rawUrl = process.env.DATABASE_URL ?? 'file:./dev.db'
-const filePart = rawUrl.startsWith('file:') ? rawUrl.slice(5) : rawUrl
-const dbPath = path.isAbsolute(filePart) ? filePart : path.resolve(process.cwd(), filePart)
-const adapter = new PrismaLibSql({ url: `file:${dbPath}` })
-const prisma = new PrismaClient({ adapter })
+import { prisma } from '../src/lib/prisma'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
