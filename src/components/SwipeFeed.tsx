@@ -503,10 +503,6 @@ export default function SwipeFeed({ sessionId }: SwipeFeedProps) {
         </button>
       </div>
 
-      {/* Counter */}
-      <div className="text-center text-xs text-gray-600 pb-3">
-        {currentIndex + 1} of {posts.length} · {visiblePosts.length} more loading
-      </div>
     </div>
   )
 }
