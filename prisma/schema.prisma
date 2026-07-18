@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── CANONICAL ENTITY ───────────────────────────────────────────────────────
+
+model Entity {
+  id                  String   @id @default(cuid())
+  entity_type         String   // restaurant | class | show | concert | party | exhibit | market | fitness | other
+  canonical_name      String
+  short_description   String?
+  full_description    String?
+  tags                String   @default("[]") // JSON array
+  category_confidence Float    @default(1.0)
+
+  // Location
+  neighborhood        String?
+  borough             String?
+  address             String?
+  lat                 Float?
+  lng                 Float?
+
+  // Contact / web
+  website             String?
+  phone               String?
+  instagram_handle    String?
+  tiktok_handle       String?
+
+  // Business details
+  business_hours      String?  // JSON object
+  price_level         Int?     // 1–4
+  is_permanently_closed Boolean @default(false)
+
+  // Source tracking
+  source_urls         String   @default("[]") // JSON array
+  source_confidence   Float    @default(0.5)
+  claim_status        String   @default("unclaimed") // unclaimed | pending | verified
+
+  // Quality signals
+  metadata_completeness Float  @default(0.0)
+  has_good_media        Boolean @default(false)
+
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  occurrences         Occurrence[]
+  media               Media[]
+  reviews             ReviewSummary?
+  posts               Post[]
+  interactions        UserInteraction[]
+  saved_items         SavedItem[]
+  source_records      SourceRecord[]
+  claim_requests      ClaimRequest[]
+}
+
+// ─── EVENT / OCCURRENCE ─────────────────────────────────────────────────────
+
+model Occurrence {
+  id              String    @id @default(cuid())
+  entity_id       String
+  entity          Entity    @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  title           String
+  start_time      DateTime?
+  end_time        DateTime?
+  recurrence_rule String?
+  ticket_url      String?
+  price           String?
+  price_cents_min Int?
+  price_cents_max Int?
+  capacity        Int?
+  event_status    String    @default("scheduled")
+  freshness_score Float     @default(1.0)
+
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  media           Media[]
+  posts           Post[]
+  interactions    UserInteraction[]
+}
+
+// ─── MEDIA ──────────────────────────────────────────────────────────────────
+
+model Media {
+  id              String    @id @default(cuid())
+  entity_id       String?
+  entity          Entity?   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  occurrence_id   String?
+  occurrence      Occurrence? @relation(fields: [occurrence_id], references: [id], onDelete: Cascade)
+
+  media_type      String    // image | video | embed
+  source_platform String    // instagram | tiktok | google | yelp | eventbrite | direct | unknown
+  source_url      String
+  embed_url       String?
+  thumbnail_url   String?
+  alt_text        String?
+  rights_status   String    @default("linked")
+  ranking_score   Float     @default(0.5)
+  is_primary      Boolean   @default(false)
+
+  created_at      DateTime  @default(now())
+}
+
+// ─── REVIEW SUMMARY ─────────────────────────────────────────────────────────
+
+model ReviewSummary {
+  id              String   @id @default(cuid())
+  entity_id       String   @unique
+  entity          Entity   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  review_summary  String?
+  sentiment_score Float?
+  review_count    Int      @default(0)
+  avg_rating      Float?
+  notable_quotes  String   @default("[]")
+  source_breakdown String  @default("{}")
+
+  updated_at      DateTime @updatedAt
+}
+
+// ─── SOURCE RECORD ──────────────────────────────────────────────────────────
+
+model SourceRecord {
+  id              String   @id @default(cuid())
+  entity_id       String
+  entity          Entity   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  platform        String
+  platform_id     String?
+  raw_url         String?
+  raw_name        String?
+  raw_address     String?
+  raw_data        String?
+
+  created_at      DateTime @default(now())
+}
+
+// ─── POST (feed card) ───────────────────────────────────────────────────────
+
+model Post {
+  id              String   @id @default(cuid())
+  entity_id       String
+  entity          Entity   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  occurrence_id   String?
+  occurrence      Occurrence? @relation(fields: [occurrence_id], references: [id])
+
+  headline        String
+  subheadline     String?
+  body_markdown   String?
+  cta_label       String   @default("Learn more")
+  cta_url         String?
+
+  is_active       Boolean  @default(true)
+  boost_score     Float    @default(0.0)
+  quality_score   Float    @default(0.5)
+  expires_at      DateTime?
+
+  target_neighborhoods String @default("[]")
+  target_tags          String @default("[]")
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  interactions    UserInteraction[]
+}
+
+// ─── USER ───────────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  email           String?  @unique
+  display_name    String?
+  session_token   String?  @unique
+  created_at      DateTime @default(now())
+
+  preferences     UserPreferences?
+  interactions    UserInteraction[]
+  saved_items     SavedItem[]
+  claim_requests  ClaimRequest[]
+}
+
+// ─── USER PREFERENCES ───────────────────────────────────────────────────────
+
+model UserPreferences {
+  id                    String   @id @default(cuid())
+  user_id               String   @unique
+  user                  User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  neighborhood_prefs    String   @default("[]")
+  interest_tags         String   @default("[]")
+  price_sensitivity     Int      @default(2)
+  time_prefs            String   @default("[]")
+  indoor_outdoor        String   @default("both")
+  solo_or_group         String   @default("both")
+
+  onboarding_completed  Boolean  @default(false)
+  updated_at            DateTime @updatedAt
+}
+
+// ─── USER INTERACTIONS ──────────────────────────────────────────────────────
+
+model UserInteraction {
+  id              String   @id @default(cuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_id       String?
+  entity          Entity?  @relation(fields: [entity_id], references: [id])
+  occurrence_id   String?
+  occurrence      Occurrence? @relation(fields: [occurrence_id], references: [id])
+  post_id         String?
+  post            Post?    @relation(fields: [post_id], references: [id])
+
+  action          String   // impression | swipe_left | swipe_right | save | open_details | outbound_click | hide
+  hide_type       String?
+  timestamp       DateTime @default(now())
+  session_id      String?
+}
+
+// ─── SAVED ITEMS ────────────────────────────────────────────────────────────
+
+model SavedItem {
+  id              String   @id @default(cuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_id       String
+  entity          Entity   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  folder          String   @default("general")
+  note            String?
+  saved_at        DateTime @default(now())
+
+  @@unique([user_id, entity_id])
+}
+
+// ─── BUSINESS CLAIM REQUEST ─────────────────────────────────────────────────
+
+model ClaimRequest {
+  id              String   @id @default(cuid())
+  entity_id       String
+  entity          Entity   @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  submitter_name  String
+  submitter_email String
+  submitter_role  String
+  relationship    String
+
+  verification_method  String?
+  verification_code    String?
+  verification_sent_at DateTime?
+  verified_at          DateTime?
+
+  status          String   @default("pending")
+  notes           String?
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+}
