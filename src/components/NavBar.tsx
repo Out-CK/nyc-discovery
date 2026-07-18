@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Compass, Bookmark, Settings, Map } from 'lucide-react'
+import { Compass, Bookmark, Settings, Map, UserRound } from 'lucide-react'
 
 export default function NavBar() {
   const path = usePathname()
@@ -10,6 +10,7 @@ export default function NavBar() {
   const links = [
     { href: '/feed', icon: Compass, label: 'Discover' },
     { href: '/saved', icon: Bookmark, label: 'Saved' },
+    { href: '/you', icon: UserRound, label: 'You' },
   ]
 
   return (

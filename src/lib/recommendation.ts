@@ -13,6 +13,7 @@
 
 import { prisma } from './prisma'
 import { parseJSON } from './utils'
+import { getForecast, weatherAdjust } from './weather'
 
 export interface ScoredPost {
   post_id: string
@@ -160,6 +161,7 @@ export async function scoreFeed(
   })[]
 
   // 4. Score each candidate
+  const forecast = await getForecast()
   const scored: ScoredPost[] = []
 
   for (const post of candidates) {
@@ -210,6 +212,10 @@ export async function scoreFeed(
 
     // Freshness
     score += (post.occurrence?.freshness_score ?? 1.0) * 5
+
+    // Weather: boost indoor events on rainy days, outdoor on nice ones,
+    // penalize outdoor events forecast to be rained out
+    score += weatherAdjust(postTags, post.occurrence?.start_time ?? null, forecast)
 
     // Small random jitter to prevent identical scores
     score += Math.random() * 2

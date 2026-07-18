@@ -2,8 +2,50 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion'
-import { Heart, X, Bookmark, Info, MapPin, Clock, DollarSign, ExternalLink } from 'lucide-react'
+import { Heart, X, Bookmark, Info, MapPin, Clock, DollarSign, ExternalLink, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+
+// ── Weather chip ─────────────────────────────────────────────────────────────
+// One /api/weather fetch per page load, shared by every card.
+interface DayForecast { date: string; precipProb: number; tempMax: number; code: number }
+let forecastPromise: Promise<Record<string, DayForecast>> | null = null
+function loadForecast() {
+  if (!forecastPromise) {
+    forecastPromise = fetch('/api/weather')
+      .then((r) => r.json())
+      .then((d) => d.days ?? {})
+      .catch(() => ({}))
+  }
+  return forecastPromise
+}
+
+function weatherEmoji(f: DayForecast): string {
+  if (f.precipProb >= 60) return '🌧'
+  if (f.precipProb >= 35) return '🌦'
+  if (f.code >= 71 && f.code <= 77) return '🌨'
+  if (f.tempMax >= 88) return '🥵'
+  return '☀️'
+}
+
+function WeatherChip({ startTime, outdoor }: { startTime: string | null; outdoor: boolean }) {
+  const [f, setF] = useState<DayForecast | null>(null)
+  useEffect(() => {
+    if (!startTime) return
+    const key = new Date(startTime).toISOString().slice(0, 10)
+    loadForecast().then((days) => setF(days[key] ?? null))
+  }, [startTime])
+  if (!f) return null
+  const rainedOut = outdoor && f.precipProb >= 55
+  return (
+    <span
+      className="flex items-center gap-1"
+      style={rainedOut ? { color: '#60a5fa' } : undefined}
+      title={`${f.precipProb}% rain · high ${f.tempMax}°`}
+    >
+      {weatherEmoji(f)} {f.tempMax}°{rainedOut ? ' rain likely' : ''}
+    </span>
+  )
+}
 
 interface Media {
   id: string
@@ -267,6 +309,10 @@ function SwipeCard({
                 <DollarSign size={11} /> {post.occurrence.price}
               </span>
             )}
+            <WeatherChip
+              startTime={post.occurrence?.start_time ?? null}
+              outdoor={tags.includes('Outdoor')}
+            />
           </div>
 
           {/* Tags */}
@@ -298,6 +344,13 @@ function SwipeCard({
               onClick={(e) => e.stopPropagation()}
             >
               <Info size={13} /> Learn more
+            </Link>
+            <Link
+              href={`/you?similar=${entity.id}`}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Sparkles size={13} /> More like this
             </Link>
             {(post.cta_url || entity.website) && (
               <a

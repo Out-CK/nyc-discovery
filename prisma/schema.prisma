@@ -261,3 +261,12 @@ model ClaimRequest {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 }
+
+// ─── MORE-LIKE-THIS CACHE ───────────────────────────────────────────────────
+// LLM-computed semantic similarity, one row per source entity.
+
+model SimilarEvents {
+  entity_id   String   @id
+  results     String   // JSON: [{entity_id, reason}]
+  computed_at DateTime @default(now())
+}
