@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import BottomNav from "@/components/BottomNav";
 
 export const metadata: Metadata = {
   title: "NYC Discovery – Find your next thing to do",
@@ -13,8 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className="min-h-full flex flex-col bg-[#0f0f0f] text-[#f5f5f5]">
+      <body className="min-h-full flex flex-col bg-[#0f0f0f] text-[#f5f5f5] pb-14">
         {children}
+        <BottomNav />
       </body>
     </html>
   );

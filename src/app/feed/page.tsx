@@ -30,7 +30,7 @@ export default async function FeedPage() {
   const sessionId = randomBytes(8).toString('hex')
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - 3.5rem)' }}>
       <NavBar />
       <div className="flex-1 overflow-hidden">
         <SwipeFeed sessionId={sessionId} />
